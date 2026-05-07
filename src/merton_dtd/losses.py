@@ -8,7 +8,10 @@ import torch
 from .config import MertonParams, PolicyParams
 from .merton import exact_step, reward_rate
 
-LossName = Literal["td", "dtd", "beta_dtd", "rl_pinn"]
+LossName = Literal[
+    "td", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
+    "naive_dtd", "beta_naive_dtd",
+]
 
 
 def make_batch(
@@ -146,6 +149,94 @@ def dtd_residual(
     return pred - target
 
 
+def naive_dtd_residual(
+    critic,
+    wealth: torch.Tensor,
+    wealth_next: torch.Tensor,
+    reward: torch.Tensor,
+    params: MertonParams,
+    dt: float,
+    t: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """
+    Naive-dTD (Table 1 of Settai et al.), discretization-friendly form:
+
+        prediction = (rho * dt) * V(W_t)             [gradient flows]
+        target     = r*dt + ΔW V_w(W_t) + 0.5 ΔW² V_ww(W_t)   [detached]
+
+    The noise-coupled derivative terms live in the *target* (and are detached),
+    so the prediction is noise-free and the semi-gradient is unbiased — fixed
+    point coincides with the HJB equation. Cost: variance of the target scales
+    as 1/Δt, so per-sample noise is much larger than for the rearranged dTD.
+    """
+    if t is None:
+        V = critic.value(wealth)
+        _, Vw, Vww = critic.value_and_derivatives(wealth)
+        time_target = 0.0
+    else:
+        V = critic.value(wealth, t)
+        _, Vt, Vw, Vww = critic.value_and_derivatives(wealth, t)
+        time_target = (dt * Vt).detach()
+
+    Vw = Vw.detach()
+    Vww = Vww.detach()
+    delta = wealth_next - wealth
+    reward_step = reward * dt
+
+    prediction = (params.rho * dt) * V
+    target = reward_step + time_target + delta * Vw + 0.5 * delta.square() * Vww
+    return prediction - target
+
+
+def dtd_mean_residual(
+    critic,
+    wealth: torch.Tensor,
+    params: MertonParams,
+    policy: PolicyParams,
+    dt: float,
+    num_replicas: int,
+    t: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """
+    Mean-residual dTD estimator: draw K i.i.d. transitions from the same W_t,
+    average the per-replica residual, then square.
+
+    Per-replica residual:
+        delta_k = ΔW_k V_w + 0.5 ΔW_k² V_ww + r dt − ρ dt V(W + ΔW_k).
+
+    Mean over k of delta_k has population limit Δt · HJB(W) and zero population
+    contribution from the V_w-times-noise term, removing the BRM regularizer
+    on V_w² that biases the per-sample MSE estimator.
+    """
+    from .merton import exact_step, reward_rate
+
+    if num_replicas < 2:
+        raise ValueError("dtd_mean_residual requires num_replicas >= 2")
+    if t is not None:
+        raise NotImplementedError("dtd_mean_residual does not yet support finite horizon")
+
+    _, Vw, Vww = critic.value_and_derivatives(wealth)
+    time_term = 0.0
+
+    reward = reward_rate(wealth, params, policy)
+    reward_step = reward * dt
+
+    pred_sum = torch.zeros_like(wealth)
+    V_next_sum = torch.zeros_like(wealth)
+    for _ in range(num_replicas):
+        noise = torch.randn_like(wealth)
+        wealth_next = exact_step(wealth, params, policy, dt, noise)
+        delta = wealth_next - wealth
+        pred_sum = pred_sum + delta * Vw + 0.5 * delta.square() * Vww
+        with torch.no_grad():
+            V_next_sum = V_next_sum + critic.value(wealth_next)
+
+    pred_mean = time_term + pred_sum / num_replicas
+    V_next_mean = V_next_sum / num_replicas
+    target_mean = -reward_step + (params.rho * dt) * V_next_mean
+    return pred_mean - target_mean
+
+
 def rl_pinn_residual(
     critic,
     wealth: torch.Tensor,
@@ -190,6 +281,8 @@ def compute_loss(
     t: torch.Tensor | None = None,
     t_next: torch.Tensor | None = None,
     terminal_value_next: torch.Tensor | None = None,
+    policy: "PolicyParams | None" = None,
+    num_replicas: int = 1,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """
     Losses:
@@ -224,6 +317,8 @@ def compute_loss(
     td_mse = torch.mean(td.square())
     dtd_mse = torch.mean(dtd.square())
     pinn_mse = torch.tensor(float("nan"))
+    dtd_mean_mse = torch.tensor(float("nan"))
+    naive_dtd_mse = torch.tensor(float("nan"))
 
     if loss_name == "rl_pinn":
         pinn = rl_pinn_residual(
@@ -243,6 +338,38 @@ def compute_loss(
         loss = dtd_mse
     elif loss_name == "beta_dtd":
         loss = (1.0 - beta) * td_mse + beta * dtd_mse
+    elif loss_name in ("naive_dtd", "beta_naive_dtd"):
+        naive = naive_dtd_residual(
+            critic=critic,
+            wealth=wealth,
+            wealth_next=wealth_next,
+            reward=reward,
+            params=params,
+            dt=dt,
+            t=t,
+        )
+        naive_dtd_mse = torch.mean(naive.square())
+        if loss_name == "naive_dtd":
+            loss = naive_dtd_mse
+        else:
+            loss = (1.0 - beta) * td_mse + beta * naive_dtd_mse
+    elif loss_name in ("dtd_mean", "beta_dtd_mean"):
+        if policy is None:
+            raise ValueError(f"loss_name={loss_name} requires policy")
+        dtd_mean = dtd_mean_residual(
+            critic=critic,
+            wealth=wealth,
+            params=params,
+            policy=policy,
+            dt=dt,
+            num_replicas=num_replicas,
+            t=t,
+        )
+        dtd_mean_mse = torch.mean(dtd_mean.square())
+        if loss_name == "dtd_mean":
+            loss = dtd_mean_mse
+        else:
+            loss = (1.0 - beta) * td_mse + beta * dtd_mean_mse
     else:
         raise ValueError(f"Unknown loss_name: {loss_name}")
 
@@ -250,6 +377,8 @@ def compute_loss(
         "td_mse": float(td_mse.detach().cpu()),
         "dtd_mse": float(dtd_mse.detach().cpu()),
         "pinn_mse": float(pinn_mse.detach().cpu()),
+        "dtd_mean_mse": float(dtd_mean_mse.detach().cpu()),
+        "naive_dtd_mse": float(naive_dtd_mse.detach().cpu()),
         "loss": float(loss.detach().cpu()),
     }
     return loss, metrics

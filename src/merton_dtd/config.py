@@ -83,3 +83,4 @@ class TrainConfig:
     beta: float = 0.5
     device: str = "cpu"
     log_every: int = 100
+    num_replicas: int = 1

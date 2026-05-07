@@ -27,9 +27,13 @@ def parse_args() -> argparse.Namespace:
         "--loss",
         type=str,
         default="beta_dtd",
-        choices=["td", "dtd", "beta_dtd", "rl_pinn"],
+        choices=[
+            "td", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
+            "naive_dtd", "beta_naive_dtd",
+        ],
     )
     parser.add_argument("--beta", type=float, default=0.5)
+    parser.add_argument("--num-replicas", type=int, default=1, help="K for dtd_mean / beta_dtd_mean")
 
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=2048)
@@ -80,6 +84,7 @@ def main() -> None:
         beta=args.beta,
         device=args.device,
         log_every=args.log_every,
+        num_replicas=args.num_replicas,
     )
 
     horizon = (
