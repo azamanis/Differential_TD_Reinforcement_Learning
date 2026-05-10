@@ -17,11 +17,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--r", type=float, default=0.02)
     parser.add_argument("--mu", type=float, default=0.08)
     parser.add_argument("--sigma", type=float, default=0.20)
-    parser.add_argument("--gamma", type=float, default=2.0)
-    parser.add_argument("--rho", type=float, default=0.08)
+    parser.add_argument("--gamma", type=float, default=2.0) # risk aversion param
+    parser.add_argument("--rho", type=float, default=0.08) #TODO: continuos discount rate
 
-    parser.add_argument("--pi", type=float, default=0.75)
-    parser.add_argument("--kappa", type=float, default=0.06125)
+    # Default policy is the infinite-horizon Merton-optimal policy for the given params.
+    # Optimal Pi and Kappa are fully determined by the Merton parameters
+    parser.add_argument("--pi", type=float, default=0.75) # fraction of wealth invested in risky asset
+    parser.add_argument("--kappa", type=float, default=0.06125) # consumption = kappa * wealth
 
     parser.add_argument(
         "--loss",

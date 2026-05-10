@@ -48,15 +48,18 @@ def td_residual(
 ) -> torch.Tensor:
     """
     Standard one-step TD residual:
-        delta_TD = reward_step + gamma_disc * V(W_{t+dt}) - V(W_t)
+        delta_TD = reward_step + rho_disc * V(W_{t+dt}) - V(W_t)
 
     where
         reward_step = reward_rate * dt
-        gamma_disc  = exp(-rho * dt)
+        rho_disc  = exp(-rho * dt)
     """
+
+    # rho is the continuous discount factor
+    # in the paper they use gamma (but in the merton context gamma is the risk aversion param)
     V = critic.value(wealth, t)
     reward_step = reward * dt
-    gamma_disc = math.exp(-params.rho * dt)
+    rho_disc = math.exp(-params.rho * dt)
 
     with torch.no_grad():
         if terminal_value_next is None:
@@ -64,7 +67,7 @@ def td_residual(
         else:
             V_next = terminal_value_next
 
-    return reward_step + gamma_disc * V_next - V
+    return reward_step + rho_disc * V_next - V
 
 
 def dtd_prediction_and_target(
@@ -105,18 +108,20 @@ def dtd_prediction_and_target(
     reward_step = reward * dt
 
     # Prediction side: derivative/local-dynamics terms at the current state
+    # Note: time prediction is zero for infinite horizon
     prediction = time_prediction + delta_w * Vw + 0.5 * delta_w.square() * Vww
 
     # Target side: value/reward terms
-    with torch.no_grad():
+    with torch.no_grad(): # we don't backprop througb target
         if terminal_value_next is None:
             V_next = critic.value(wealth_next, t_next)
         else:
             V_next = terminal_value_next
 
-    # Since gamma_disc = exp(-rho dt), we have -log(gamma_disc) = rho dt
+    # Since rho_disc = exp(-rho dt), we have -log(rho_disc) = rho dt
+    # Reward step is Utility() * dt
     target = -reward_step + (params.rho * dt) * V_next
-
+    
     return prediction, target
 
 
