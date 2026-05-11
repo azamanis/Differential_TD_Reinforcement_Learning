@@ -1,0 +1,3 @@
+[submodule "TemporalDifferenceContinuous"]
+	path = TemporalDifferenceContinuous
+	url = https://github.com/fynsta/TemporalDifferenceContinuous
