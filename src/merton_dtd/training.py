@@ -72,6 +72,7 @@ def train_fixed_policy_critic(
         "v_w_norm": [],
         "hjb_rmse": [],
         "dtd_noise_floor": [],
+        "dtd_signal_part": [],
     }
 
     wealth = sample_log_uniform(
@@ -175,6 +176,9 @@ def train_fixed_policy_critic(
             history["hjb_rmse"].append(float(eval_metrics.get("hjb_rmse", float("nan"))))
             history["dtd_noise_floor"].append(
                 float(eval_metrics.get("dtd_noise_floor", float("nan")))
+            )
+            history["dtd_signal_part"].append(
+                float(eval_metrics.get("dtd_signal_part", float("nan")))
             )
             iterator.set_postfix(loss=f"{metrics['loss']:.3e}", mae=f"{eval_metrics['mae']:.3e}")
 

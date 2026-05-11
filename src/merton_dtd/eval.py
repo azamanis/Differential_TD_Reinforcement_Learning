@@ -75,7 +75,7 @@ def evaluate_critic_on_grid(
     #   HJB(w)    = L^pi V (w) - rho V(w) + U(kappa w)
     a = params.r + policy.pi * (params.mu - params.r) - policy.kappa
     b = policy.pi * params.sigma
-    LV = a * grid * Vw_np + 0.5 * (b ** 2) * (grid ** 2) * Vww_np
+    LV = a * grid * Vw_np + 0.5 * (b**2) * (grid**2) * Vww_np
     U = utility(policy.kappa * grid, g)
     hjb = LV - params.rho * pred + U
 
@@ -90,10 +90,12 @@ def evaluate_critic_on_grid(
         "mae": float(abs_err.mean()),
         "rmse": float(np.sqrt(np.mean((pred - truth) ** 2))),
         "mape": float(rel_err.mean()),
+        # Debugging diagnostics for the noise-bias hypothesis:
         "v_w_mae": float(v_w_abs_err.mean()),
-        "v_w_norm": float(np.sqrt(np.mean(Vw_np ** 2))),
-        "v_w_norm_true": float(np.sqrt(np.mean(Vw_truth ** 2))),
-        "hjb_rmse": float(np.sqrt(np.mean(hjb ** 2))),
+        "v_w_norm": float(np.sqrt(np.mean(Vw_np**2))),
+        "v_w_norm_true": float(np.sqrt(np.mean(Vw_truth**2))),
+        "hjb_rmse": float(np.sqrt(np.mean(hjb**2))),
+        # Meta info:
         "params": asdict(params),
         "policy": asdict(policy),
     }
@@ -101,8 +103,12 @@ def evaluate_critic_on_grid(
     if dt is not None:
         # Analytic per-sample noise variance of the dTD residual (leading order):
         #   Var(Delta W * V_w) = V_w^2 * pi^2 sigma^2 w^2 * dt
-        noise_floor = (Vw_np ** 2) * (policy.pi ** 2) * (params.sigma ** 2) * (grid ** 2) * dt
+        noise_floor = (Vw_np**2) * (policy.pi**2) * (params.sigma**2) * (grid**2) * dt
         out["dtd_noise_floor"] = float(noise_floor.mean())
+
+        # Analytic signal part of E[delta_dTD^2 | W] = dt^2 * HJB(W)^2.
+        signal_part = (dt**2) * (hjb**2)
+        out["dtd_signal_part"] = float(signal_part.mean())
 
     return out
 
