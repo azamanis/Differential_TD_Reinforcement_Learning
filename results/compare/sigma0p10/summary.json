@@ -1,0 +1,42 @@
+{
+  "td": {
+    "final_mae": 19.88719375763279,
+    "final_v_w_norm": 580.372314453125
+  },
+  "dtd": {
+    "final_mae": 269.1080053187299,
+    "final_v_w_norm": 0.0156002352014184
+  },
+  "beta_dtd": {
+    "final_mae": 27.503595721867576,
+    "final_v_w_norm": 494.26239013671875
+  },
+  "meta": {
+    "params": {
+      "r": 0.02,
+      "mu": 0.08,
+      "sigma": 0.1,
+      "gamma": 2.0,
+      "rho": 0.08
+    },
+    "policy": {
+      "pi": 0.75,
+      "kappa": 0.06125
+    },
+    "train_cfg": {
+      "seed": 0,
+      "batch_size": 2048,
+      "num_steps": 12000,
+      "learning_rate": 0.002,
+      "dt": 0.003968253968253968,
+      "wealth_min": 0.3,
+      "wealth_max": 3.0,
+      "eval_points": 200,
+      "beta": 0.5,
+      "device": "cpu",
+      "log_every": 100,
+      "num_replicas": 1
+    },
+    "beta": 0.5
+  }
+}

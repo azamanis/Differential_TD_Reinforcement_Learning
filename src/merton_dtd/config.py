@@ -25,8 +25,8 @@ class MertonParams:
     rho: float = 0.08
 
     def __post_init__(self) -> None:
-        if self.sigma <= 0.0:
-            raise ValueError("sigma must be strictly positive")
+        if self.sigma < 0.0:
+            raise ValueError("sigma must be non-negative")
         if self.gamma <= 0.0 or abs(self.gamma - 1.0) < 1e-12:
             raise ValueError("gamma must be positive and different from 1")
         if self.rho <= 0.0:

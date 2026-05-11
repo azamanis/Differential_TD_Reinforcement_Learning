@@ -116,34 +116,37 @@ def plot_training_curves(result: dict, out_file: str | Path) -> None:
     history = result["history"]
     steps = np.asarray(history["step"], dtype=float)
     loss = np.asarray(history["loss"], dtype=float)
-    td_mse = np.asarray(history["td_mse"], dtype=float)
-    dtd_mse = np.asarray(history["dtd_mse"], dtype=float)
     mae = np.asarray(history["mae"], dtype=float)
-    rmse = np.asarray(history["rmse"], dtype=float)
+    signal = np.asarray(history.get("dtd_signal_part", []), dtype=float)
+    noise = np.asarray(history.get("dtd_noise_floor", []), dtype=float)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
 
-    # Left panel: training losses
+    # Left panel: training loss + analytic decomposition on the eval grid.
+    # Total training loss = whichever loss the run optimized (TD or dTD).
+    # signal = dt² · mean(HJB²); noise floor = dt · mean(b²W²V_w²).
     axes[0].plot(steps, loss, label="Total training loss", linewidth=2.0)
-    axes[0].plot(steps, td_mse, label="TD loss component", linestyle="--", linewidth=1.8)
-    axes[0].plot(steps, dtd_mse, label="dTD loss component", linestyle=":", linewidth=2.0)
+    if signal.size == steps.size:
+        axes[0].plot(steps, signal, label=r"signal: $\Delta t^2\,\overline{HJB^2}$",
+                     linestyle="--", linewidth=1.6, color="tab:blue")
+    if noise.size == steps.size:
+        axes[0].plot(steps, noise, label=r"noise floor: $\Delta t\,\overline{b^2W^2V_w^2}$",
+                     linestyle=":", linewidth=1.8, color="tab:red")
 
     axes[0].set_yscale("log")
     axes[0].set_xlim(steps.min(), steps.max())
     axes[0].set_xlabel("Training step")
-    axes[0].set_ylabel("Loss (log scale)")
-    axes[0].set_title("Training losses over optimization")
+    axes[0].set_ylabel("Loss / decomposition (log scale)")
+    axes[0].set_title("Training loss and analytic decomposition")
     axes[0].grid(True, which="both", linestyle=":", alpha=0.5)
     axes[0].legend(frameon=True)
 
-    # Right panel: error against exact solution
+    # Right panel: MAE vs closed form.
     axes[1].plot(steps, mae, label="MAE", linewidth=2.0)
-    axes[1].plot(steps, rmse, label="RMSE", linestyle="--", linewidth=1.8)
-
     axes[1].set_yscale("log")
     axes[1].set_xlim(steps.min(), steps.max())
     axes[1].set_xlabel("Training step")
-    axes[1].set_ylabel("Error vs exact value (log scale)")
+    axes[1].set_ylabel("MAE vs exact value (log scale)")
     axes[1].set_title("Critic accuracy against closed-form benchmark")
     axes[1].grid(True, which="both", linestyle=":", alpha=0.5)
     axes[1].legend(frameon=True)
