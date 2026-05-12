@@ -39,7 +39,6 @@ def _evaluate_streaming_critic(
         low=train_cfg.wealth_min,
         high=train_cfg.wealth_max,
         num=train_cfg.eval_points,
-        dt=train_cfg.dt if horizon is None else None,
         device=train_cfg.device,
         horizon=horizon,
     )
@@ -71,8 +70,6 @@ def train_fixed_policy_critic(
         "v_w_mae": [],
         "v_w_norm": [],
         "hjb_rmse": [],
-        "dtd_noise_floor": [],
-        "dtd_signal_part": [],
     }
 
     wealth = sample_log_uniform(
@@ -174,12 +171,6 @@ def train_fixed_policy_critic(
             history["v_w_mae"].append(float(eval_metrics.get("v_w_mae", float("nan"))))
             history["v_w_norm"].append(float(eval_metrics.get("v_w_norm", float("nan"))))
             history["hjb_rmse"].append(float(eval_metrics.get("hjb_rmse", float("nan"))))
-            history["dtd_noise_floor"].append(
-                float(eval_metrics.get("dtd_noise_floor", float("nan")))
-            )
-            history["dtd_signal_part"].append(
-                float(eval_metrics.get("dtd_signal_part", float("nan")))
-            )
             iterator.set_postfix(loss=f"{metrics['loss']:.3e}", mae=f"{eval_metrics['mae']:.3e}")
 
     summary = _evaluate_streaming_critic(

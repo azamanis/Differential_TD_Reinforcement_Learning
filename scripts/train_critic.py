@@ -136,7 +136,7 @@ def main() -> None:
     # numpy arrays inside result["summary"] are not JSON serializable; keep only scalars in summary.json
     s = result["summary"]
     scalar_keys = ["mae", "rmse", "mape", "v_w_mae", "v_w_norm", "v_w_norm_true",
-                   "hjb_rmse", "dtd_noise_floor"]
+                   "hjb_rmse"]
     serializable = {
         "params": asdict(params),
         "policy": asdict(policy),

@@ -105,7 +105,6 @@ def _worker(cfg: dict[str, Any]) -> dict[str, Any]:
         "v_w_norm",
         "v_w_norm_true",
         "hjb_rmse",
-        "dtd_noise_floor",
     ]
     summary_out = {
         "run_id": cfg["run_id"],

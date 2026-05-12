@@ -1,7 +1,6 @@
 """
 Initialize the critic at (a supervised fit to) the closed-form V^pi and then
-run pure dTD. Tests the hypothesis that the dTD population minimum is *not* at
-truth — if so, dTD should actively pull the critic away from V^pi.
+run pure dTD.
 
 Outputs the standard training history dict + checkpoint to --out-dir, plus
 a small "pretrain vs dtd" trajectory plot.
@@ -66,7 +65,6 @@ def supervised_pretrain(
                 low=train_cfg.wealth_min,
                 high=train_cfg.wealth_max,
                 num=train_cfg.eval_points,
-                dt=train_cfg.dt,
                 device=train_cfg.device,
             )
             history["step"].append(step)
@@ -89,8 +87,7 @@ def run_dtd_from(
     optimizer = Adam(critic.parameters(), lr=train_cfg.learning_rate)
     history: dict[str, list[float]] = {
         "step": [], "loss": [], "mae": [], "rmse": [], "v_w_mae": [], "v_w_norm": [],
-        "hjb_rmse": [], "dtd_noise_floor": [], "dtd_signal_part": [], "dtd_mse": [],
-        "td_mse": [],
+        "hjb_rmse": [], "dtd_mse": [], "td_mse": [],
     }
     wealth = sample_log_uniform(
         batch_size=train_cfg.batch_size,
@@ -127,7 +124,6 @@ def run_dtd_from(
                 low=train_cfg.wealth_min,
                 high=train_cfg.wealth_max,
                 num=train_cfg.eval_points,
-                dt=train_cfg.dt,
                 device=train_cfg.device,
             )
             history["step"].append(step)
@@ -137,8 +133,6 @@ def run_dtd_from(
             history["v_w_mae"].append(float(ev["v_w_mae"]))
             history["v_w_norm"].append(float(ev["v_w_norm"]))
             history["hjb_rmse"].append(float(ev["hjb_rmse"]))
-            history["dtd_noise_floor"].append(float(ev.get("dtd_noise_floor", float("nan"))))
-            history["dtd_signal_part"].append(float(ev.get("dtd_signal_part", float("nan"))))
             history["dtd_mse"].append(float(metrics["dtd_mse"]))
             history["td_mse"].append(float(metrics["td_mse"]))
             iterator.set_postfix(loss=f"{metrics['loss']:.2e}", mae=f"{ev['mae']:.2e}")
@@ -148,7 +142,7 @@ def run_dtd_from(
 def plot_drift(pretrain_hist: dict, dtd_hist: dict, out_path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(1, 3, figsize=(15.0, 4.5))
+    fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.5))
 
     pre_steps = np.asarray(pretrain_hist["step"])
     pre_mae = np.asarray(pretrain_hist["mae"])
@@ -170,15 +164,7 @@ def plot_drift(pretrain_hist: dict, dtd_hist: dict, out_path: Path) -> None:
     ax.axvline(boundary, color="black", ls=":", alpha=0.5)
     ax.set_yscale("log")
     ax.set_xlabel("step"); ax.set_ylabel(r"MAE of $V_w$")
-    ax.set_title(r"$V_w$ error: drifts away under dTD")
-    ax.legend(fontsize=9); ax.grid(alpha=0.3)
-
-    ax = axes[2]
-    ax.plot(dtd_steps, dtd_hist["dtd_signal_part"], label="signal", color="tab:blue")
-    ax.plot(dtd_steps, dtd_hist["dtd_noise_floor"], label="noise floor", color="tab:red")
-    ax.set_yscale("log")
-    ax.set_xlabel("step"); ax.set_ylabel("dTD loss parts")
-    ax.set_title("dTD loss decomposition starting from truth")
+    ax.set_title(r"$V_w$ error under dTD")
     ax.legend(fontsize=9); ax.grid(alpha=0.3)
 
     fig.tight_layout()
@@ -245,7 +231,7 @@ def main() -> None:
     summary_grid = evaluate_critic_on_grid(
         critic=critic, params=params, policy=policy,
         low=train_cfg.wealth_min, high=train_cfg.wealth_max,
-        num=train_cfg.eval_points, dt=train_cfg.dt, device=args.device,
+        num=train_cfg.eval_points, device=args.device,
     )
     result = {
         "history": dtd_hist,

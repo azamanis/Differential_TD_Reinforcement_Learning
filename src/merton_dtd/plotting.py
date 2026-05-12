@@ -117,27 +117,15 @@ def plot_training_curves(result: dict, out_file: str | Path) -> None:
     steps = np.asarray(history["step"], dtype=float)
     loss = np.asarray(history["loss"], dtype=float)
     mae = np.asarray(history["mae"], dtype=float)
-    signal = np.asarray(history.get("dtd_signal_part", []), dtype=float)
-    noise = np.asarray(history.get("dtd_noise_floor", []), dtype=float)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
 
-    # Left panel: training loss + analytic decomposition on the eval grid.
-    # Total training loss = whichever loss the run optimized (TD or dTD).
-    # signal = dt² · mean(HJB²); noise floor = dt · mean(b²W²V_w²).
     axes[0].plot(steps, loss, label="Total training loss", linewidth=2.0)
-    if signal.size == steps.size:
-        axes[0].plot(steps, signal, label=r"signal: $\Delta t^2\,\overline{HJB^2}$",
-                     linestyle="--", linewidth=1.6, color="tab:blue")
-    if noise.size == steps.size:
-        axes[0].plot(steps, noise, label=r"noise floor: $\Delta t\,\overline{b^2W^2V_w^2}$",
-                     linestyle=":", linewidth=1.8, color="tab:red")
-
     axes[0].set_yscale("log")
     axes[0].set_xlim(steps.min(), steps.max())
     axes[0].set_xlabel("Training step")
-    axes[0].set_ylabel("Loss / decomposition (log scale)")
-    axes[0].set_title("Training loss and analytic decomposition")
+    axes[0].set_ylabel("Loss (log scale)")
+    axes[0].set_title("Training loss")
     axes[0].grid(True, which="both", linestyle=":", alpha=0.5)
     axes[0].legend(frameon=True)
 
