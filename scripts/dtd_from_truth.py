@@ -193,6 +193,7 @@ def main() -> None:
     p.add_argument("--pretrain-target-mae", type=float, default=1.0)
     p.add_argument("--num-steps", type=int, default=12000)
     p.add_argument("--loss", type=str, default="dtd")
+    p.add_argument("--num-replicas", type=int, default=1)
     p.add_argument("--device", type=str, default="cpu")
     p.add_argument("--out-dir", type=str, default="results/dtd_from_truth")
     args = p.parse_args()
@@ -213,6 +214,7 @@ def main() -> None:
         beta=0.5,
         device=args.device,
         log_every=args.log_every,
+        num_replicas=args.num_replicas,
     )
 
     critic = build_critic(params, device=args.device)

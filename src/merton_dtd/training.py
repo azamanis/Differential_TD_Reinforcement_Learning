@@ -204,3 +204,8 @@ def save_checkpoint(critic, result: dict[str, Any], out_dir: str | Path) -> None
         },
         out_path / "checkpoint.pt",
     )
+    history = result.get("history")
+    if history is not None:
+        import json
+        serializable = {k: [float(x) for x in v] for k, v in history.items() if hasattr(v, "__iter__")}
+        (out_path / "history.json").write_text(json.dumps(serializable))

@@ -142,6 +142,15 @@ def main() -> None:
         "policy": asdict(policy),
         "train_cfg": asdict(train_cfg),
         "loss": args.loss,
+        "config": {
+            "loss": args.loss,
+            "beta": args.beta,
+            "sigma": args.sigma,
+            "lr": args.lr,
+            "batch_size": args.batch_size,
+            "seed": args.seed,
+            "num_replicas": args.num_replicas,
+        },
     }
     if finite_horizon:
         serializable["horizon"] = {"T": args.horizon, "terminal_coef": args.terminal_coef}

@@ -120,6 +120,34 @@ def reward_rate(wealth: torch.Tensor, params: MertonParams, policy: PolicyParams
     return utility(consumption, params.gamma)
 
 
+def exact_step_tensor(
+    wealth: torch.Tensor,
+    params: MertonParams,
+    pi: torch.Tensor,
+    kappa: torch.Tensor,
+    dt: float,
+    noise: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Per-sample exact step under a state-dependent policy.
+
+    Same closed-form GBM update as `exact_step`, but `pi` and `kappa` are
+    tensors broadcastable to `wealth`. Valid because (pi, kappa) is constant
+    over the [t, t+dt] interval — only sample-dependent.
+    """
+    if noise is None:
+        noise = torch.randn_like(wealth)
+    a = params.r + pi * (params.mu - params.r) - kappa
+    b = pi * params.sigma
+    return wealth * torch.exp((a - 0.5 * b * b) * dt + b * math.sqrt(dt) * noise)
+
+
+def reward_rate_tensor(
+    wealth: torch.Tensor, params: MertonParams, kappa: torch.Tensor
+) -> torch.Tensor:
+    consumption = kappa * wealth
+    return utility(consumption, params.gamma)
+
+
 def _finite_horizon_D(params: MertonParams, policy: PolicyParams) -> float:
     """The constant D appearing in the A(t) ODE.
 

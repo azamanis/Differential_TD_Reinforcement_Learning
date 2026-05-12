@@ -71,6 +71,34 @@ class HorizonConfig:
 
 
 @dataclass(frozen=True)
+class PPOConfig:
+    """PPO hyperparameters.
+
+    The actor outputs a 2-D Gaussian over the raw action a = (a_pi, a_kappa).
+    Dynamics use pi = a_pi (unconstrained, leverage/shorts allowed) and
+    kappa = softplus(a_kappa) + kappa_floor (strictly positive).
+    """
+
+    n_iters: int = 200
+    n_steps: int = 64
+    n_envs: int = 256
+    n_epochs: int = 10
+    minibatch_size: int = 1024
+    clip_eps: float = 0.2
+    gae_lambda: float = 0.95
+    ent_coef: float = 0.0
+    value_coef: float = 0.5
+    lr_actor: float = 3e-4
+    max_grad_norm: float = 0.5
+    init_log_std: float = -1.0
+    kappa_floor: float = 1e-3
+    actor_hidden_dim: int = 64
+    actor_depth: int = 2
+    actor_activation: str = "tanh"
+    state_dependent_std: bool = False
+
+
+@dataclass(frozen=True)
 class TrainConfig:
     seed: int = 0
     batch_size: int = 512
