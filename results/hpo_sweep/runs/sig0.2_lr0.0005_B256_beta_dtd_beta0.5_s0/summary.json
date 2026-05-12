@@ -1,0 +1,59 @@
+{
+  "run_id": "sig0.2_lr0.0005_B256_beta_dtd_beta0.5_s0",
+  "config": {
+    "loss": "beta_dtd",
+    "beta": 0.5,
+    "sigma": 0.2,
+    "lr": 0.0005,
+    "batch_size": 256,
+    "seed": 0,
+    "r": 0.02,
+    "mu": 0.08,
+    "gamma": 2.0,
+    "rho": 0.08,
+    "pi": 0.75,
+    "kappa": 0.06125,
+    "num_steps": 15000,
+    "dt": 0.003968253968253968,
+    "wealth_min": 0.3,
+    "wealth_max": 3.0,
+    "eval_points": 200,
+    "log_every": 50,
+    "out_dir": "results/hpo_sweep",
+    "run_id": "sig0.2_lr0.0005_B256_beta_dtd_beta0.5_s0"
+  },
+  "elapsed_sec": 161.1627540588379,
+  "params": {
+    "r": 0.02,
+    "mu": 0.08,
+    "sigma": 0.2,
+    "gamma": 2.0,
+    "rho": 0.08
+  },
+  "policy": {
+    "pi": 0.75,
+    "kappa": 0.06125
+  },
+  "train_cfg": {
+    "seed": 0,
+    "batch_size": 256,
+    "num_steps": 15000,
+    "learning_rate": 0.0005,
+    "dt": 0.003968253968253968,
+    "wealth_min": 0.3,
+    "wealth_max": 3.0,
+    "eval_points": 200,
+    "beta": 0.5,
+    "device": "cpu",
+    "log_every": 50,
+    "num_replicas": 1
+  },
+  "mae": 78.48621328765326,
+  "rmse": 133.20056200374637,
+  "mape": 0.1552127725144324,
+  "v_w_mae": 430.1711064313053,
+  "v_w_norm": 249.52549743652344,
+  "v_w_norm_true": 984.7001763309571,
+  "hjb_rmse": 4.193797038431498,
+  "dtd_noise_floor": 2.4405516713293416
+}

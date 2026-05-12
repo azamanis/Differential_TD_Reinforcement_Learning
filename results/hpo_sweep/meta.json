@@ -1,0 +1,12 @@
+{
+  "num_runs": 270,
+  "workers": 7,
+  "grid": {
+    "sigmas": "0.05,0.20",
+    "lrs": "5e-4,2e-3,5e-3",
+    "batches": "256,1024,4096",
+    "betas": "0.1,0.25,0.5,0.75",
+    "num_seeds": 3,
+    "num_steps": 15000
+  }
+}
