@@ -10,8 +10,17 @@ from .config import MertonParams, PolicyParams
 from .merton import exact_step, reward_rate
 
 LossName = Literal[
-    "td", "td_mean", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
-    "dtd_k", "beta_dtd_k", "naive_dtd", "beta_naive_dtd",
+    "td",
+    "td_mean",
+    "dtd",
+    "beta_dtd",
+    "rl_pinn",
+    "dtd_mean",
+    "beta_dtd_mean",
+    "dtd_k",
+    "beta_dtd_k",
+    "naive_dtd",
+    "beta_naive_dtd",
 ]
 
 
@@ -74,7 +83,8 @@ def make_batch(
     """
     noise = torch.randn_like(wealth)
     wealth_next = exact_step(wealth, params, policy, dt, noise)
-    reward = reward_rate(wealth, params, policy)  # reward rate, not yet multiplied by dt
+    # reward rate, not yet multiplied by dt
+    reward = reward_rate(wealth, params, policy)
     return wealth, wealth_next, reward
 
 
@@ -154,17 +164,11 @@ def dtd_prediction_and_target(
     # Note: time prediction is zero for infinite horizon
     prediction = time_prediction + delta_w * Vw + 0.5 * delta_w.square() * Vww
 
-    # Target side: value/reward terms
-    with torch.no_grad(): # we don't backprop througb target
-        if terminal_value_next is None:
-            V_next = critic.value(wealth_next, t_next)
-        else:
-            V_next = terminal_value_next
+    with torch.no_grad():
+        V_current = critic.value(wealth, t)
 
-    # Since rho_disc = exp(-rho dt), we have -log(rho_disc) = rho dt
-    # Reward step is Utility() * dt
-    target = -reward_step + (params.rho * dt) * V_next
-    
+    target = -reward_step + (params.rho * dt) * V_current
+
     return prediction, target
 
 
