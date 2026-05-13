@@ -1,0 +1,44 @@
+{
+  "params": {
+    "r": 0.02,
+    "mu": 0.08,
+    "sigma": 0.05,
+    "gamma": 2.0,
+    "rho": 0.08
+  },
+  "policy": {
+    "pi": 0.75,
+    "kappa": 0.06125
+  },
+  "train_cfg": {
+    "seed": 1,
+    "batch_size": 256,
+    "num_steps": 15000,
+    "learning_rate": 0.005,
+    "dt": 0.003968253968253968,
+    "wealth_min": 0.3,
+    "wealth_max": 3.0,
+    "eval_points": 200,
+    "beta": 0.5,
+    "device": "cpu",
+    "log_every": 100,
+    "num_replicas": 32
+  },
+  "loss": "beta_dtd_mean",
+  "config": {
+    "loss": "beta_dtd_mean",
+    "beta": 0.5,
+    "sigma": 0.05,
+    "lr": 0.005,
+    "batch_size": 256,
+    "seed": 1,
+    "num_replicas": 32
+  },
+  "mae": 12.525229104422719,
+  "rmse": 16.138321762419533,
+  "mape": 0.06923753330723866,
+  "v_w_mae": 237.38862164576625,
+  "v_w_norm": 596.9680786132812,
+  "v_w_norm_true": 732.4525030772962,
+  "hjb_rmse": 3.902586798399756
+}

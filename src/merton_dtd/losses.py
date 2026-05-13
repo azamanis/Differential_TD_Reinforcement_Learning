@@ -9,9 +9,40 @@ from .config import MertonParams, PolicyParams
 from .merton import exact_step, reward_rate
 
 LossName = Literal[
-    "td", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
+    "td", "td_mean", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
     "naive_dtd", "beta_naive_dtd",
 ]
+
+
+def td_mean_residual(
+    critic,
+    wealth: torch.Tensor,
+    params: MertonParams,
+    policy: PolicyParams,
+    dt: float,
+    num_replicas: int,
+    t: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Mean-target TD: average ρ_disc·V(W_next^k) over K i.i.d. transitions, then
+    take residual against V(W_t). Reduces gradient variance K-fold; fixed point
+    unchanged (target is detached and zero-mean-noise — see dTD vs TD asymmetry)."""
+    if num_replicas < 2:
+        raise ValueError("td_mean_residual requires num_replicas >= 2")
+    if t is not None:
+        raise NotImplementedError("td_mean_residual does not yet support finite horizon")
+
+    V = critic.value(wealth)
+    reward_step = reward_rate(wealth, params, policy) * dt
+    rho_disc = math.exp(-params.rho * dt)
+
+    V_next_sum = torch.zeros_like(wealth)
+    with torch.no_grad():
+        for _ in range(num_replicas):
+            noise = torch.randn_like(wealth)
+            wealth_next = exact_step(wealth, params, policy, dt, noise)
+            V_next_sum = V_next_sum + critic.value(wealth_next)
+    V_next_mean = V_next_sum / num_replicas
+    return reward_step + rho_disc * V_next_mean - V
 
 
 def make_batch(
@@ -339,6 +370,19 @@ def compute_loss(
         loss = pinn_mse
     elif loss_name == "td":
         loss = td_mse
+    elif loss_name == "td_mean":
+        if policy is None:
+            raise ValueError(f"loss_name={loss_name} requires policy")
+        td_mean = td_mean_residual(
+            critic=critic,
+            wealth=wealth,
+            params=params,
+            policy=policy,
+            dt=dt,
+            num_replicas=num_replicas,
+            t=t,
+        )
+        loss = torch.mean(td_mean.square())
     elif loss_name == "dtd":
         loss = dtd_mse
     elif loss_name == "beta_dtd":

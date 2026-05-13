@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="beta_dtd",
         choices=[
-            "td", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
+            "td", "td_mean", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
             "naive_dtd", "beta_naive_dtd",
         ],
     )
