@@ -11,18 +11,42 @@ from merton_dtd.rl_pinn import RLPinnConfig, train_fixed_policy_critic_rl_pinn
 from merton_dtd.training import save_checkpoint, train_fixed_policy_critic
 
 
+def _parse_vector(text: str | None) -> float | list[float] | None:
+    if text is None:
+        return None
+    if "," in text:
+        return [float(x.strip()) for x in text.split(",") if x.strip()]
+    return float(text)
+
+
+def _parse_matrix(text: str | None) -> list[list[float]] | None:
+    if text is None:
+        return None
+    rows = [row.strip() for row in text.split(";") if row.strip()]
+    matrix: list[list[float]] = []
+    for row in rows:
+        matrix.append([float(x.strip()) for x in row.split(",") if x.strip()])
+    return matrix if matrix else None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a TD / dTD critic on a fixed Merton policy.")
 
     parser.add_argument("--r", type=float, default=0.02)
-    parser.add_argument("--mu", type=float, default=0.08)
-    parser.add_argument("--sigma", type=float, default=0.20)
+    parser.add_argument("--mu", type=str, default="0.08")
+    parser.add_argument("--sigma", type=str, default="0.20")
+    parser.add_argument(
+        "--sigma-mat",
+        type=str,
+        default=None,
+        help="Optional covariance matrix; rows separated by ';', columns by ','",
+    )
     parser.add_argument("--gamma", type=float, default=2.0) # risk aversion param
     parser.add_argument("--rho", type=float, default=0.08) #TODO: continuos discount rate
 
     # Default policy is the infinite-horizon Merton-optimal policy for the given params.
     # Optimal Pi and Kappa are fully determined by the Merton parameters
-    parser.add_argument("--pi", type=float, default=0.75) # fraction of wealth invested in risky asset
+    parser.add_argument("--pi", type=str, default="0.75") # fraction of wealth invested in risky asset
     parser.add_argument("--kappa", type=float, default=0.06125) # consumption = kappa * wealth
 
     parser.add_argument(
@@ -72,8 +96,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    params = MertonParams(r=args.r, mu=args.mu, sigma=args.sigma, gamma=args.gamma, rho=args.rho)
-    policy = PolicyParams(pi=args.pi, kappa=args.kappa)
+    mu = _parse_vector(args.mu)
+    sigma = _parse_vector(args.sigma)
+    sigma_mat = _parse_matrix(args.sigma_mat)
+    pi = _parse_vector(args.pi)
+
+    params = MertonParams(r=args.r, mu=mu, sigma=sigma_mat or sigma, gamma=args.gamma, rho=args.rho)
+    policy = PolicyParams(pi=pi, kappa=args.kappa)
     train_cfg = TrainConfig(
         seed=args.seed,
         batch_size=args.batch_size,

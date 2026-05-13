@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class MertonParams:
@@ -16,21 +18,52 @@ class MertonParams:
 
     Utility is CRRA with risk aversion gamma != 1:
         U(c) = c^(1-gamma) / (1-gamma)
+
+    Multi-asset extension:
+        - mu can be a vector of expected returns.
+        - sigma can be a vector of vols (diagonal covariance) or a full covariance matrix.
+        - pi can be a vector of portfolio weights.
     """
 
     r: float = 0.02
-    mu: float = 0.08
-    sigma: float = 0.20
+    mu: float | list[float] | tuple[float, ...] = 0.08
+    sigma: float | list[float] | list[list[float]] | tuple = 0.20
     gamma: float = 2.0
     rho: float = 0.08
 
     def __post_init__(self) -> None:
-        if self.sigma < 0.0:
-            raise ValueError("sigma must be non-negative")
+        if self._sigma_is_scalar():
+            if float(self.sigma) < 0.0:
+                raise ValueError("sigma must be non-negative")
+        elif self._sigma_is_vector():
+            sigma_vec = np.asarray(self.sigma, dtype=float)
+            if np.any(sigma_vec < 0.0):
+                raise ValueError("sigma entries must be non-negative")
+        elif self._sigma_is_matrix():
+            sigma_mat = np.asarray(self.sigma, dtype=float)
+            if sigma_mat.shape[0] != sigma_mat.shape[1]:
+                raise ValueError("sigma covariance matrix must be square")
+            if np.any(np.diag(sigma_mat) < 0.0):
+                raise ValueError("sigma covariance diagonal must be non-negative")
+        else:
+            raise ValueError("sigma must be a scalar, vector, or covariance matrix")
         if self.gamma <= 0.0 or abs(self.gamma - 1.0) < 1e-12:
             raise ValueError("gamma must be positive and different from 1")
         if self.rho <= 0.0:
             raise ValueError("rho must be strictly positive")
+
+    def _sigma_is_scalar(self) -> bool:
+        return isinstance(self.sigma, (int, float, np.floating))
+
+    def _sigma_is_vector(self) -> bool:
+        if isinstance(self.sigma, np.ndarray):
+            return self.sigma.ndim == 1
+        return isinstance(self.sigma, (list, tuple)) and (len(self.sigma) > 0) and not isinstance(self.sigma[0], (list, tuple))
+
+    def _sigma_is_matrix(self) -> bool:
+        if isinstance(self.sigma, np.ndarray):
+            return self.sigma.ndim == 2
+        return isinstance(self.sigma, (list, tuple)) and (len(self.sigma) > 0) and isinstance(self.sigma[0], (list, tuple))
 
 
 @dataclass(frozen=True)
@@ -41,7 +74,7 @@ class PolicyParams:
     kappa: consumption rate as a fraction of wealth, so c = kappa * W.
     """
 
-    pi: float
+    pi: float | list[float] | tuple[float, ...]
     kappa: float
 
     def __post_init__(self) -> None:

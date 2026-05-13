@@ -9,6 +9,81 @@ import torch
 from .config import HorizonConfig, MertonParams, PolicyParams
 
 
+def _as_vector(x, name: str) -> np.ndarray:
+    if isinstance(x, np.ndarray):
+        vec = x.astype(float)
+    elif isinstance(x, (list, tuple)):
+        vec = np.asarray(x, dtype=float)
+    else:
+        vec = np.asarray([float(x)], dtype=float)
+    if vec.ndim != 1:
+        raise ValueError(f"{name} must be a scalar or 1D vector")
+    return vec
+
+
+def _as_covariance(sigma, n: int) -> np.ndarray:
+    if isinstance(sigma, np.ndarray):
+        mat = sigma.astype(float)
+    elif isinstance(sigma, (list, tuple)):
+        mat = np.asarray(sigma, dtype=float)
+    else:
+        sigma_val = float(sigma)
+        if n == 1:
+            return np.asarray([[sigma_val ** 2]], dtype=float)
+        return np.diag(np.full(n, sigma_val ** 2))
+
+    if mat.ndim == 1:
+        if mat.size != n:
+            raise ValueError("sigma vector length must match number of assets")
+        return np.diag(mat ** 2)
+    if mat.ndim == 2:
+        if mat.shape != (n, n):
+            raise ValueError("sigma covariance must be shape (n, n)")
+        return mat
+    raise ValueError("sigma must be scalar, vector, or covariance matrix")
+
+
+def _infer_num_assets(params: MertonParams, policy: PolicyParams) -> int:
+    sizes: list[int] = []
+
+    if isinstance(params.mu, (list, tuple, np.ndarray)):
+        sizes.append(int(np.asarray(params.mu).shape[0]))
+    if isinstance(params.sigma, (list, tuple, np.ndarray)):
+        sigma_arr = np.asarray(params.sigma)
+        if sigma_arr.ndim == 1:
+            sizes.append(int(sigma_arr.shape[0]))
+        elif sigma_arr.ndim == 2:
+            sizes.append(int(sigma_arr.shape[0]))
+    if isinstance(policy.pi, (list, tuple, np.ndarray)):
+        sizes.append(int(np.asarray(policy.pi).shape[0]))
+
+    if not sizes:
+        return 1
+    if len(set(sizes)) != 1:
+        raise ValueError("Inconsistent asset dimensions among mu, sigma, and pi")
+    return sizes[0]
+
+
+def portfolio_drift_and_variance(params: MertonParams, policy: PolicyParams) -> tuple[float, float]:
+    n = _infer_num_assets(params, policy)
+    mu = _as_vector(params.mu, "mu")
+    if mu.size == 1 and n > 1:
+        mu = np.full(n, float(mu.item()))
+
+    pi = _as_vector(policy.pi, "pi")
+    if pi.size == 1 and n > 1:
+        pi = np.full(n, float(pi.item()))
+
+    if mu.size != n or pi.size != n:
+        raise ValueError("mu and pi must match the number of assets")
+
+    sigma = _as_covariance(params.sigma, n)
+    mu_excess = mu - params.r
+    drift_excess = float(pi @ mu_excess)
+    variance = float(pi @ sigma @ pi)
+    return drift_excess, variance
+
+
 def utility(consumption: torch.Tensor | np.ndarray | float, gamma: float):
     """CRRA utility U(c) = c^(1-gamma)/(1-gamma), gamma != 1."""
     if isinstance(consumption, np.ndarray):
@@ -33,12 +108,8 @@ def exact_value_coefficient(params: MertonParams, policy: PolicyParams) -> float
     D must be strictly positive for the infinite-horizon discounted value to be finite.
     """
     g = params.gamma
-    drift_term = (
-        params.r
-        + policy.pi * (params.mu - params.r)
-        - policy.kappa
-        - 0.5 * g * (policy.pi ** 2) * (params.sigma ** 2)
-    )
+    drift_excess, variance = portfolio_drift_and_variance(params, policy)
+    drift_term = params.r + drift_excess - policy.kappa - 0.5 * g * variance
     denom = params.rho - (1.0 - g) * drift_term
     if denom <= 0.0:
         raise ValueError(
@@ -70,14 +141,22 @@ def optimal_policy_closed_form(params: MertonParams) -> Tuple[PolicyParams, floa
     The policy is admissible only if kappa* > 0.
     """
     g = params.gamma
-    pi_star = (params.mu - params.r) / (g * params.sigma ** 2)
-    sharpe_term = 0.5 * ((params.mu - params.r) ** 2) / (g * params.sigma ** 2)
+    n = _infer_num_assets(params, PolicyParams(pi=0.0, kappa=1.0))
+    mu = _as_vector(params.mu, "mu")
+    if mu.size == 1 and n > 1:
+        mu = np.full(n, float(mu.item()))
+    sigma = _as_covariance(params.sigma, n)
+
+    mu_excess = mu - params.r
+    pi_star_vec = np.linalg.solve(sigma, mu_excess) / g
+    sharpe_term = 0.5 * float(mu_excess @ np.linalg.solve(sigma, mu_excess)) / g
     kappa_star = (params.rho - (1.0 - g) * (params.r + sharpe_term)) / g
     if kappa_star <= 0.0:
         raise ValueError(
             "The chosen parameters do not produce a positive optimal consumption rate. "
             "Increase rho or modify (mu, r, sigma, gamma)."
         )
+    pi_star = float(pi_star_vec[0]) if pi_star_vec.size == 1 else pi_star_vec.tolist()
     policy = PolicyParams(pi=pi_star, kappa=kappa_star)
     coeff = exact_value_coefficient(params, policy)
     return policy, coeff
@@ -92,7 +171,8 @@ def is_policy_admissible(params: MertonParams, policy: PolicyParams) -> bool:
 
 
 def risky_weight_to_sharpe_ratio(params: MertonParams, pi: float) -> float:
-    return pi * params.sigma
+    _drift_excess, variance = portfolio_drift_and_variance(params, PolicyParams(pi=pi, kappa=1.0))
+    return math.sqrt(variance)
 
 
 def exact_step(
@@ -110,9 +190,10 @@ def exact_step(
     """
     if noise is None:
         noise = torch.randn_like(wealth)
-    a = params.r + policy.pi * (params.mu - params.r) - policy.kappa
-    b = policy.pi * params.sigma
-    return wealth * torch.exp((a - 0.5 * b * b) * dt + b * math.sqrt(dt) * noise)
+    drift_excess, variance = portfolio_drift_and_variance(params, policy)
+    a = params.r + drift_excess - policy.kappa
+    b = math.sqrt(max(variance, 0.0))
+    return wealth * torch.exp((a - 0.5 * variance) * dt + b * math.sqrt(dt) * noise)
 
 
 def reward_rate(wealth: torch.Tensor, params: MertonParams, policy: PolicyParams) -> torch.Tensor:
@@ -136,6 +217,10 @@ def exact_step_tensor(
     """
     if noise is None:
         noise = torch.randn_like(wealth)
+    if not isinstance(params.mu, (int, float)):
+        raise ValueError("exact_step_tensor only supports scalar mu/sigma")
+    if not isinstance(params.sigma, (int, float)):
+        raise ValueError("exact_step_tensor only supports scalar mu/sigma")
     a = params.r + pi * (params.mu - params.r) - kappa
     b = pi * params.sigma
     return wealth * torch.exp((a - 0.5 * b * b) * dt + b * math.sqrt(dt) * noise)
@@ -157,12 +242,8 @@ def _finite_horizon_D(params: MertonParams, policy: PolicyParams) -> float:
     Admissibility requires D > 0.
     """
     g = params.gamma
-    drift_term = (
-        params.r
-        + policy.pi * (params.mu - params.r)
-        - policy.kappa
-        - 0.5 * g * (policy.pi ** 2) * (params.sigma ** 2)
-    )
+    drift_excess, variance = portfolio_drift_and_variance(params, policy)
+    drift_term = params.r + drift_excess - policy.kappa - 0.5 * g * variance
     D = params.rho - (1.0 - g) * drift_term
     if D <= 0.0:
         raise ValueError(

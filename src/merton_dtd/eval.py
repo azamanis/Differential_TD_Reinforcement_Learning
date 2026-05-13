@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import math
 
 import numpy as np
 import torch
 
 from .config import HorizonConfig, MertonParams, PolicyParams
-from .merton import exact_value, exact_value_coefficient, exact_value_finite, utility
+from .merton import (
+    exact_value,
+    exact_value_coefficient,
+    exact_value_finite,
+    portfolio_drift_and_variance,
+    utility,
+)
 
 
 def wealth_grid(low: float, high: float, num: int) -> np.ndarray:
@@ -65,8 +72,9 @@ def evaluate_critic_on_grid(
     # Deterministic HJB residual at the learned critic:
     #   L^pi V (w) = a w V_w(w) + 0.5 b^2 w^2 V_ww(w)
     #   HJB(w)    = L^pi V (w) - rho V(w) + U(kappa w)
-    a = params.r + policy.pi * (params.mu - params.r) - policy.kappa
-    b = policy.pi * params.sigma
+    drift_excess, variance = portfolio_drift_and_variance(params, policy)
+    a = params.r + drift_excess - policy.kappa
+    b = math.sqrt(max(variance, 0.0))
     LV = a * grid * Vw_np + 0.5 * (b**2) * (grid**2) * Vww_np
     U = utility(policy.kappa * grid, g)
     hjb = LV - params.rho * pred + U
