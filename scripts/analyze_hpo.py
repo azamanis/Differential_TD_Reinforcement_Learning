@@ -12,6 +12,9 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -151,7 +154,7 @@ def beats_td_table(agg: dict, sigma: float, out_path: Path) -> str:
                          f"{best_bdtd:>10.2f}  {delta:>+7.2f}  {'YES' if win else '-':>5s}")
     lines.append(f"\nβ-dTD beat TD in {win_count}/{total} (lr,B) cells.")
     text = "\n".join(lines)
-    out_path.write_text(text)
+    out_path.write_text(text, encoding="utf-8")
     return text
 
 

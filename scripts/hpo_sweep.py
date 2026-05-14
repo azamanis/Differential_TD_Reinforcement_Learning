@@ -59,7 +59,7 @@ def _worker(cfg: dict[str, Any]) -> dict[str, Any]:
 
     _t.trange = lambda n, **kw: _SilentRange(n, **kw)  # type: ignore[assignment]
 
-    from merton_dtd.config import MertonParams, PolicyParams, TrainConfig
+    from merton_dtd.config import HorizonConfig, MertonParams, PolicyParams, TrainConfig
     from merton_dtd.training import train_fixed_policy_critic
 
     params = MertonParams(
@@ -83,6 +83,11 @@ def _worker(cfg: dict[str, Any]) -> dict[str, Any]:
         device="cpu",
         log_every=cfg["log_every"],
     )
+    horizon = (
+        HorizonConfig(T=cfg["horizon"], terminal_coef=cfg["terminal_coef"])
+        if cfg["horizon"] is not None
+        else None
+    )
 
     t0 = time.time()
     _, result = train_fixed_policy_critic(
@@ -90,6 +95,8 @@ def _worker(cfg: dict[str, Any]) -> dict[str, Any]:
         policy=policy,
         train_cfg=train_cfg,
         loss_name=cfg["loss"],
+        horizon=horizon,
+        terminal_weight=cfg["terminal_weight"],
     )
     elapsed = time.time() - t0
 
@@ -114,6 +121,8 @@ def _worker(cfg: dict[str, Any]) -> dict[str, Any]:
         "policy": asdict(policy),
         "train_cfg": asdict(train_cfg),
     }
+    if horizon is not None:
+        summary_out["horizon"] = asdict(horizon)
     for k in scalar_keys:
         if k in s:
             summary_out[k] = float(s[k])
@@ -214,12 +223,15 @@ def build_grid(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "pi": args.pi,
                 "kappa": args.kappa,
                 "num_steps": args.num_steps,
-                "dt": 1.0 / 252.0,
+                "dt": args.dt,
                 "wealth_min": 0.3,
                 "wealth_max": 3.0,
                 "eval_points": 200,
                 "log_every": args.log_every,
                 "out_dir": args.out_dir,
+                "horizon": args.horizon,
+                "terminal_coef": args.terminal_coef,
+                "terminal_weight": args.terminal_weight,
             }
         )
         c["run_id"] = (
@@ -245,6 +257,13 @@ def main() -> None:
     p.add_argument("--num-seeds", type=int, default=3)
     p.add_argument("--num-steps", type=int, default=15000)
     p.add_argument("--log-every", type=int, default=50)
+    p.add_argument("--dt", type=float, default=1.0 / 252.0)
+
+    # Finite-horizon options. If --horizon is passed, the critic becomes V(t, W)
+    # and is evaluated against the finite-horizon closed form.
+    p.add_argument("--horizon", type=float, default=None, help="terminal time T (finite horizon)")
+    p.add_argument("--terminal-coef", type=float, default=0.0, help="finite horizon: bequest coefficient")
+    p.add_argument("--terminal-weight", type=float, default=1.0, help="finite horizon: weight on terminal MSE")
 
     p.add_argument("--out-dir", type=str, default="results/hpo_sweep")
     p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
@@ -269,6 +288,10 @@ def main() -> None:
             "betas": args.betas,
             "num_seeds": args.num_seeds,
             "num_steps": args.num_steps,
+            "dt": args.dt,
+            "horizon": args.horizon,
+            "terminal_coef": args.terminal_coef,
+            "terminal_weight": args.terminal_weight,
         },
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
