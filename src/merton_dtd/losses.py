@@ -10,7 +10,7 @@ from .merton import exact_step, reward_rate
 
 LossName = Literal[
     "td", "td_mean", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
-    "naive_dtd", "beta_naive_dtd",
+    "dtd_k", "beta_dtd_k", "naive_dtd", "beta_naive_dtd",
 ]
 
 
@@ -237,6 +237,9 @@ def dtd_mean_residual(
     Mean-residual dTD estimator: draw K i.i.d. transitions from the same W_t,
     average the per-replica residual, then square.
 
+    This is the K-sample dTD variant. The aliases ``dtd_mean`` / ``dtd_k``
+    both map to this estimator in ``compute_loss``.
+
     Per-replica residual:
         delta_k = ΔW_k V_w + 0.5 ΔW_k² V_ww + r dt − ρ dt V(W + ΔW_k).
 
@@ -402,7 +405,7 @@ def compute_loss(
             loss = naive_dtd_mse
         else:
             loss = (1.0 - beta) * td_mse + beta * naive_dtd_mse
-    elif loss_name in ("dtd_mean", "beta_dtd_mean"):
+    elif loss_name in ("dtd_mean", "dtd_k", "beta_dtd_mean", "beta_dtd_k"):
         if policy is None:
             raise ValueError(f"loss_name={loss_name} requires policy")
         dtd_mean = dtd_mean_residual(
@@ -415,7 +418,7 @@ def compute_loss(
             t=t,
         )
         dtd_mean_mse = torch.mean(dtd_mean.square())
-        if loss_name == "dtd_mean":
+        if loss_name in ("dtd_mean", "dtd_k"):
             loss = dtd_mean_mse
         else:
             loss = (1.0 - beta) * td_mse + beta * dtd_mean_mse

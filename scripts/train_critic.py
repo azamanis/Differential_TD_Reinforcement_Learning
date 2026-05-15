@@ -55,11 +55,12 @@ def parse_args() -> argparse.Namespace:
         default="beta_dtd",
         choices=[
             "td", "td_mean", "dtd", "beta_dtd", "rl_pinn", "dtd_mean", "beta_dtd_mean",
+            "dtd_k", "beta_dtd_k",
             "naive_dtd", "beta_naive_dtd",
         ],
     )
     parser.add_argument("--beta", type=float, default=0.5)
-    parser.add_argument("--num-replicas", type=int, default=1, help="K for dtd_mean / beta_dtd_mean")
+    parser.add_argument("--num-replicas", type=int, default=1, help="K for dtd_mean / dtd_k / beta_dtd_mean / beta_dtd_k")
 
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=2048)
