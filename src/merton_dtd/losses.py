@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from typing import Literal
 
 import torch
@@ -22,25 +23,36 @@ def td_mean_residual(
     dt: float,
     num_replicas: int,
     t: torch.Tensor | None = None,
+    t_next: torch.Tensor | None = None,
+    terminal_value_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
 ) -> torch.Tensor:
     """Mean-target TD: average ρ_disc·V(W_next^k) over K i.i.d. transitions, then
     take residual against V(W_t). Reduces gradient variance K-fold; fixed point
     unchanged (target is detached and zero-mean-noise — see dTD vs TD asymmetry)."""
     if num_replicas < 2:
         raise ValueError("td_mean_residual requires num_replicas >= 2")
-    if t is not None:
-        raise NotImplementedError("td_mean_residual does not yet support finite horizon")
+    if t is not None and t_next is None:
+        raise ValueError("td_mean_residual finite-horizon mode requires t_next")
 
-    V = critic.value(wealth)
+    V = critic.value(wealth, t)
     reward_step = reward_rate(wealth, params, policy) * dt
     rho_disc = math.exp(-params.rho * dt)
+    terminal_mask = None
+    if t_next is not None and terminal_value_fn is not None:
+        terminal_mask = t_next >= float(critic.time_horizon)
 
     V_next_sum = torch.zeros_like(wealth)
     with torch.no_grad():
         for _ in range(num_replicas):
             noise = torch.randn_like(wealth)
             wealth_next = exact_step(wealth, params, policy, dt, noise)
-            V_next_sum = V_next_sum + critic.value(wealth_next)
+            V_next = critic.value(wealth_next, t_next)
+            if terminal_mask is not None and torch.any(terminal_mask):
+                V_next = V_next.clone()
+                V_next[terminal_mask] = terminal_value_fn(
+                    wealth_next[terminal_mask]
+                ).detach()
+            V_next_sum = V_next_sum + V_next
     V_next_mean = V_next_sum / num_replicas
     return reward_step + rho_disc * V_next_mean - V
 
@@ -232,6 +244,8 @@ def dtd_mean_residual(
     dt: float,
     num_replicas: int,
     t: torch.Tensor | None = None,
+    t_next: torch.Tensor | None = None,
+    terminal_value_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
 ) -> torch.Tensor:
     """
     Mean-residual dTD estimator: draw K i.i.d. transitions from the same W_t,
@@ -251,14 +265,21 @@ def dtd_mean_residual(
 
     if num_replicas < 2:
         raise ValueError("dtd_mean_residual requires num_replicas >= 2")
-    if t is not None:
-        raise NotImplementedError("dtd_mean_residual does not yet support finite horizon")
+    if t is not None and t_next is None:
+        raise ValueError("dtd_mean_residual finite-horizon mode requires t_next")
 
-    _, Vw, Vww = critic.value_and_derivatives(wealth)
-    time_term = 0.0
+    if t is None:
+        _, Vw, Vww = critic.value_and_derivatives(wealth)
+        time_term = 0.0
+    else:
+        _, Vt, Vw, Vww = critic.value_and_derivatives(wealth, t)
+        time_term = dt * Vt
 
     reward = reward_rate(wealth, params, policy)
     reward_step = reward * dt
+    terminal_mask = None
+    if t_next is not None and terminal_value_fn is not None:
+        terminal_mask = t_next >= float(critic.time_horizon)
 
     pred_sum = torch.zeros_like(wealth)
     V_next_sum = torch.zeros_like(wealth)
@@ -268,7 +289,13 @@ def dtd_mean_residual(
         delta = wealth_next - wealth
         pred_sum = pred_sum + delta * Vw + 0.5 * delta.square() * Vww
         with torch.no_grad():
-            V_next_sum = V_next_sum + critic.value(wealth_next)
+            V_next = critic.value(wealth_next, t_next)
+            if terminal_mask is not None and torch.any(terminal_mask):
+                V_next = V_next.clone()
+                V_next[terminal_mask] = terminal_value_fn(
+                    wealth_next[terminal_mask]
+                ).detach()
+            V_next_sum = V_next_sum + V_next
 
     pred_mean = time_term + pred_sum / num_replicas
     V_next_mean = V_next_sum / num_replicas
@@ -320,6 +347,7 @@ def compute_loss(
     t: torch.Tensor | None = None,
     t_next: torch.Tensor | None = None,
     terminal_value_next: torch.Tensor | None = None,
+    terminal_value_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
     policy: "PolicyParams | None" = None,
     num_replicas: int = 1,
 ) -> tuple[torch.Tensor, dict[str, float]]:
@@ -384,6 +412,8 @@ def compute_loss(
             dt=dt,
             num_replicas=num_replicas,
             t=t,
+            t_next=t_next,
+            terminal_value_fn=terminal_value_fn,
         )
         loss = torch.mean(td_mean.square())
     elif loss_name == "dtd":
@@ -416,6 +446,8 @@ def compute_loss(
             dt=dt,
             num_replicas=num_replicas,
             t=t,
+            t_next=t_next,
+            terminal_value_fn=terminal_value_fn,
         )
         dtd_mean_mse = torch.mean(dtd_mean.square())
         if loss_name in ("dtd_mean", "dtd_k"):
