@@ -1,0 +1,16 @@
+{
+  "num_runs": 270,
+  "workers": 7,
+  "grid": {
+    "sigmas": "0.05,0.2",
+    "lrs": "0.0005,0.002,0.005",
+    "batches": "256,1024,4096",
+    "betas": "0.1,0.25,0.5,0.75",
+    "num_seeds": 3,
+    "num_steps": 15000,
+    "dt": 0.02,
+    "horizon": 1.0,
+    "terminal_coef": 0.0,
+    "terminal_weight": 1.0
+  }
+}
