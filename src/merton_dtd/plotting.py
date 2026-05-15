@@ -26,6 +26,39 @@ def _nice_log_ticks(xmin: float, xmax: float) -> np.ndarray:
     return ticks
 
 
+def _format_run_title(result: dict, base: str) -> str:
+    def fmt(value) -> str:
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            return f"{value:g}"
+        return str(value)
+
+    meta = result.get("meta", {})
+    params = meta.get("params", {})
+    train_cfg = meta.get("train_cfg", {})
+    horizon = meta.get("horizon")
+
+    loss = meta.get("loss_name", "unknown loss")
+    sigma = params.get("sigma", "?")
+    lr = train_cfg.get("learning_rate", "?")
+    batch_size = train_cfg.get("batch_size", "?")
+    num_steps = train_cfg.get("num_steps", "?")
+    dt = train_cfg.get("dt", "?")
+    num_replicas = train_cfg.get("num_replicas", 1)
+
+    if horizon is None:
+        horizon_part = "IH"
+    else:
+        T = horizon.get("T", "?")
+        terminal_coef = horizon.get("terminal_coef", "?")
+        horizon_part = f"FH T={fmt(T)}, terminal_coef={fmt(terminal_coef)}"
+
+    details = (
+        f"{horizon_part} | loss={loss}, K={num_replicas}, "
+        f"sigma={sigma}, lr={fmt(lr)}, B={batch_size}, steps={num_steps}, dt={fmt(dt)}"
+    )
+    return f"{base}\n{details}"
+
+
 def plot_value_fit(result: dict, out_file: str | Path) -> None:
     summary = result["summary"]
     wealth = np.asarray(summary["wealth"], dtype=float)
@@ -33,7 +66,7 @@ def plot_value_fit(result: dict, out_file: str | Path) -> None:
     pred = np.asarray(summary["pred"], dtype=float)
 
     if pred.ndim == 2:
-        _plot_finite_horizon_value_fit(summary, out_file)
+        _plot_finite_horizon_value_fit(result, out_file)
         return
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -50,7 +83,7 @@ def plot_value_fit(result: dict, out_file: str | Path) -> None:
 
     ax.set_xlabel("Current wealth $W_t$")
     ax.set_ylabel("Value $V(W_t)$")
-    ax.set_title("Fixed-policy Merton problem:\nExact value function vs learned critic")
+    ax.set_title(_format_run_title(result, "Exact value function vs learned critic"))
     ax.grid(True, which="both", linestyle=":", alpha=0.5)
     ax.legend(frameon=True)
     fig.tight_layout()
@@ -60,7 +93,8 @@ def plot_value_fit(result: dict, out_file: str | Path) -> None:
     plt.close(fig)
 
 
-def _plot_finite_horizon_value_fit(summary: dict, out_file: str | Path) -> None:
+def _plot_finite_horizon_value_fit(result: dict, out_file: str | Path) -> None:
+    summary = result["summary"]
     wealth = np.asarray(summary["wealth"], dtype=float)
     time = np.asarray(summary["t_grid"], dtype=float)
     truth = np.asarray(summary["truth"], dtype=float)
@@ -104,7 +138,7 @@ def _plot_finite_horizon_value_fit(summary: dict, out_file: str | Path) -> None:
     axes[1].set_title("Absolute error over finite-horizon grid")
     fig.colorbar(mesh, ax=axes[1], label="|learned - exact|")
 
-    fig.suptitle("Finite-horizon Merton critic fit", fontsize=12)
+    fig.suptitle(_format_run_title(result, "Finite-horizon Merton critic fit"), fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     Path(out_file).parent.mkdir(parents=True, exist_ok=True)
@@ -139,7 +173,7 @@ def plot_training_curves(result: dict, out_file: str | Path) -> None:
     axes[1].grid(True, which="both", linestyle=":", alpha=0.5)
     axes[1].legend(frameon=True)
 
-    fig.suptitle("Merton fixed-policy critic training summary", fontsize=12)
+    fig.suptitle(_format_run_title(result, "Merton fixed-policy critic training summary"), fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     Path(out_file).parent.mkdir(parents=True, exist_ok=True)
