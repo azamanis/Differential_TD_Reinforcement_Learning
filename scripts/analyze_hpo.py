@@ -147,7 +147,7 @@ def beats_td_table(agg: dict, sigma: float, out_path: Path) -> str:
             if best_beta is None:
                 continue
             delta = best_bdtd - td_mae
-            win = delta < -0.5  # require >0.5 MAE improvement to call a win
+            win = delta < 0.0
             if win: win_count += 1
             total += 1
             lines.append(f"{lr:>8g} {B:>6d}  {td_mae:>9.2f}  {best_beta:>7g}  "
